@@ -197,7 +197,7 @@ pub fn handle_revert(app: &App, revision_str: &str) -> AppResult<()> {
 pub fn handle_commit(app: &App, commit_message: &Option<String>) -> AppResult<()> {
     app.ui.update_step("Committing changes to SVN");
 
-    if app.svn_ctx.is_dirty() == false {
+    if app.svn_ctx.is_dirty()? == false {
         app.ui.success("No changes need to commit");
         return Ok(());
     }

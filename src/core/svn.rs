@@ -32,6 +32,9 @@ pub fn svn_cleanup() -> AppResult<()> {
 
 /// ### svn cleanup
 /// 清理当前工作副本的未版本控制和忽略的文件
+/// 因为我们有了 .gitignore，所以是否理论上应该不需要这个功能了?
+/// 如果工作区出现了未版本控制的文件，但程序却没有报 dirty
+/// 是否可以认为是被 .gitignore 忽略了，但没有在 svn:ignore 中设置?
 pub fn svn_cleanup_workspace() -> AppResult<()> {
     let mut command = Command::new("svn");
     command.args(&["cleanup", "."]);
@@ -57,7 +60,6 @@ pub fn svn_update(update_args: &[&str]) -> AppResult<()> {
 // }
 
 pub enum StatusType {
-    Dirty,
     Commit,
     CheckIgnore,
     CheckGitignore,
@@ -67,7 +69,6 @@ pub enum StatusType {
 /// 返回解码后的 svn status 信息
 pub fn svn_status(status_type: StatusType) -> AppResult<String> {
     let args = match status_type {
-        StatusType::Dirty => vec!["status"],
         StatusType::CheckIgnore => vec!["status", "--xml", "--no-ignore"],
         StatusType::Commit => vec!["status", "--xml"],
         StatusType::CheckGitignore => vec!["status", "--xml", ".gitignore"],

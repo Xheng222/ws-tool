@@ -2,11 +2,13 @@
 
 
 
+use std::path::Path;
+
 use chrono::{DateTime, Local};
 use crossterm::style::Stylize;
 use regex::Regex;
 
-use crate::{commands::models::{ProjectStatus, SVNLogType}, core::{app::App, context::SvnContext, error::{AppError, AppResult}, svn::{svn_info, svn_log}}};
+use crate::{commands::{models::{ProjectStatus, SVNLogType}, utils_ignore::{auto_sync_ignore_rules, build_ignore_matcher}}, core::{app::App, context::SvnContext, error::{AppError, AppResult}, svn::{StatusType, svn_info, svn_log, svn_status}}};
 
 /// 格式化相对时间显示
 pub fn format_relative_time(iso_time: &str) -> String {
@@ -149,3 +151,38 @@ pub fn validate_folder_name(name: &str) -> AppResult<()> {
     
     Ok(())
 }
+
+/// 使用忽略规则检查工作区是否脏
+pub fn is_workspace_dirty() -> AppResult<bool> {
+    // 先同步忽略规则
+    auto_sync_ignore_rules()?;
+    let xml_str = svn_status(StatusType::Commit)?;
+    let gitignore = build_ignore_matcher()?;
+    let doc = roxmltree::Document::parse(&xml_str)?;
+
+    for entry in doc.descendants().filter(|n| n.has_tag_name("entry")) {
+        if let Some(wc_status) = entry.children().find(|n| n.has_tag_name("wc-status")) {
+            let item = wc_status.attribute("item").unwrap_or("");
+            
+            match item {
+                "unversioned" => { // 对 'unversioned' 项进行忽略规则检查
+                    let path = entry.attribute("path").unwrap_or(".");
+                    let path = Path::new(path);
+                    if !gitignore.matched(path, path.is_dir()).is_ignore() {
+                        return Ok(true);
+                    }
+                }
+                "normal" | "none" | "external" => { 
+                    // 正常或无状态的文件不算脏
+                    // external 是什么状态? 
+                    continue;
+                }
+                _ => { // 其他状态视为脏
+                    return Ok(true);
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+

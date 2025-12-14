@@ -5,7 +5,7 @@ use crate::{commands::{utils_branch::create_and_commit_to_branch, utils_commit::
 
 /// 确保工作区是干净的；如果脏，弹出交互菜单让用户选择如何处理
 pub fn ensure_clean_workspace(app: &App) -> AppResult<()> {
-    if !app.svn_ctx.is_dirty() {
+    if !app.svn_ctx.is_dirty()? {
         return Ok(());
     }
 

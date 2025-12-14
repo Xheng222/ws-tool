@@ -3,9 +3,9 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::core::{svn::StatusType, utils_default_repo::{get_repo_path, get_repo_url}};
+use crate::{commands::utils::is_workspace_dirty, core::utils_default_repo::{get_repo_path, get_repo_url}};
 
-use super::{error::{AppResult, AppError}, svn::{svn_checkout, svn_info, svn_status}, utils::{Revision, parse_revision_arg}};
+use super::{error::{AppResult, AppError}, svn::{svn_checkout, svn_info}, utils::{Revision, parse_revision_arg}};
 
 #[derive(Debug)]
 pub struct SvnContext {
@@ -24,8 +24,6 @@ pub struct SvnContext {
     current_revision: Revision,
     /// 仓库的最新版本
     latest_revision: Revision,
-    /// 工作副本是否有未提交的更改
-    is_dirty: bool,
 }
 
 impl SvnContext {
@@ -124,8 +122,8 @@ impl SvnContext {
     }
 
     /// 判断工作副本是否有未提交的更改
-    pub fn is_dirty(&self) -> bool {
-        self.is_dirty
+    pub fn is_dirty(&self) -> AppResult<bool> {
+        is_workspace_dirty()
     }
 
     /// 检查当前工作副本是否处于 Review 模式
@@ -144,7 +142,6 @@ impl SvnContext {
             repo_fs_path: default_repo_fs,
             current_revision: Revision::Number(0),
             latest_revision: Revision::Number(0),
-            is_dirty: false,
         })
     }
 
@@ -167,20 +164,7 @@ pub fn get_svn_context() -> AppResult<SvnContext> {
     let project_name_encoded = parts.first().ok_or(AppError::Validation("Could not determine project name from relative URL".to_string()))?;
     let current_project_name = urlencoding::decode(project_name_encoded)?.to_string();
 
-    let status_output = svn_status(StatusType::Dirty)?;
-    let is_dirty = {
-        let status_trimmed = status_output.trim();
-
-        if status_trimmed.is_empty() {
-            false
-        } 
-        else if status_trimmed.lines().count() == 1 && status_trimmed.contains(".gitignore") && (status_trimmed.chars().next().unwrap_or('X') == 'X')  {
-            false
-        }
-        else {
-            true
-        }
-    };
+    // let is_dirty = is_workspace_dirty()?;
 
     let current_revision = get_current_revision()?;
     let latest_revision = get_latest_revision()?;
@@ -192,7 +176,6 @@ pub fn get_svn_context() -> AppResult<SvnContext> {
         repo_fs_path,
         current_revision,
         latest_revision,
-        is_dirty,
     })
 }
 

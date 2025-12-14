@@ -1,11 +1,11 @@
 use std::env;
 
-use crate::core::{error::{AppError, AppResult}, svn::svn_svnmucc, svn_repo::svnadmin_create};
+use crate::{commands::utils::validate_folder_name, core::{error::{AppError, AppResult}, svn::svn_svnmucc, svn_repo::svnadmin_create}};
 
 
 /// 获取默认仓库路径 (exe 所在目录下的 "repo" 文件夹)
 /// - C:\...
-pub fn get_default_repo_path() -> AppResult<std::path::PathBuf> {
+pub fn get_repo_path(repo_name: Option<&str>) -> AppResult<std::path::PathBuf> {
     // 获取当前可执行文件的路径
     let exe_path = env::current_exe()?;
     // 获取父目录 (ws.exe 所在的文件夹)
@@ -13,14 +13,20 @@ pub fn get_default_repo_path() -> AppResult<std::path::PathBuf> {
         AppError::Validation(format!("Cannot find executable directory"))
     )?;
     
-    Ok(exe_dir.join("repo"))
+    if let Some(repo) = repo_name {
+        validate_folder_name(repo)?;
+        return Ok(exe_dir.join(repo));
+    }
+    else {
+        return Ok(exe_dir.join("repo"));
+    }
 }
 
 /// 获取默认仓库的 URL
 /// - file://...
-pub fn get_default_repo_url() -> AppResult<String> {
-    let path = get_default_repo_path()?;
-    
+pub fn get_repo_url(repo_name: Option<&str>) -> AppResult<String> {
+    let path = get_repo_path(repo_name)?;
+
     // 转换路径为 URL 格式
     let path_str = path.to_string_lossy().replace('\\', "/");
     

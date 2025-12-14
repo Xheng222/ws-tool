@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::core::{svn::StatusType, utils_default_repo::{get_default_repo_path, get_default_repo_url}};
+use crate::core::{svn::StatusType, utils_default_repo::{get_repo_path, get_repo_url}};
 
 use super::{error::{AppResult, AppError}, svn::{svn_checkout, svn_info, svn_status}, utils::{Revision, parse_revision_arg}};
 
@@ -133,11 +133,10 @@ impl SvnContext {
         self.current_revision < self.latest_revision
     }
 
-    /// default
     /// 用于初始化一个默认的 SvnContext 实例
-    pub fn default() -> AppResult<Self> {
-        let default_repo_url = get_default_repo_url()?;
-        let default_repo_fs = get_default_repo_path()?;
+    pub fn default(repo_name: Option<&str>) -> AppResult<Self> {
+        let default_repo_url = get_repo_url(repo_name)?;
+        let default_repo_fs = get_repo_path(repo_name)?;
 
         Ok(SvnContext {
             repo_root_url: default_repo_url,
@@ -148,6 +147,8 @@ impl SvnContext {
             is_dirty: false,
         })
     }
+
+
 }
 
 pub fn get_svn_context() -> AppResult<SvnContext> {

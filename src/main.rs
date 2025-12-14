@@ -96,6 +96,10 @@ enum Commands {
     /// Usage: new <project_name>
     New {
         project_name: String,
+
+        /// [新增] 指定目标仓库名
+        #[arg(short, long)]
+        repo: Option<String>,
     },
     /// Delete an existing project.
     /// Usage: delete <project_name>
@@ -135,11 +139,10 @@ fn main() {
                 Commands::Pull { source } => handle_pull(&app, source.as_deref()),
                 Commands::Push { target } => handle_push(&app, target.as_deref()),
 
-
                 // Workspace
                 Commands::List { all } => handle_list(&app, all),
                 Commands::Switch { project_name, branch } => handle_switch(&app, project_name.as_deref(), branch.as_deref()),
-                Commands::New { project_name } => handle_new(&app, &project_name),
+                Commands::New { project_name, .. } => handle_new(&app, &project_name),
                 Commands::Delete { project_name, force } => handle_delete(&app, &project_name, force),
                 Commands::Restore { project_name } => handle_restore(&app, &project_name),
             };
@@ -155,8 +158,14 @@ fn main() {
             match e {
                 AppError::SvnCommandFailed { .. } => { // Likely not an SVN working copy
                     match cli.command {
-                        Commands::New { project_name } => {
-                            let app = App::default().expect("Error: Failed to create default App");
+                        Commands::New { project_name, repo } => {
+                            let app = match App::default(repo.as_deref()) {
+                                Ok(a) => a,
+                                Err(e) => {
+                                    eprintln!("Error initializing application: {}", e);
+                                    return;
+                                }
+                            };
                             if let Err(e) = handle_new(&app, &project_name) {
                                 match e {
                                     AppError::OperationCancelled => app.ui.success("Operation cancelled by user."),

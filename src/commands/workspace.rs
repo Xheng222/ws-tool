@@ -100,7 +100,6 @@ pub fn handle_new(app: &App, project_name: &str) -> AppResult<()> {
     validate_folder_name(project_name)?;
     
     let project_root_url = app.svn_ctx.get_project_root_url(project_name);
-
     app.ui.update_step("Checking project existence");
     if check_url_exists(&project_root_url)? {
         app.ui.success(&format!("Project {} already exists, nothing to do.", project_name.yellow().bold()));

@@ -18,8 +18,9 @@ impl App {
         })
     }
 
-    pub fn default() -> AppResult<Self> {
-        let svn_ctx = SvnContext::default()?;
+    /// 用于初始化一个默认的 App 实例
+    pub fn default(repo_name: Option<&str>) -> AppResult<Self> {
+        let svn_ctx = SvnContext::default(repo_name)?;
 
         Ok(App {
             ui: AppUI::new(),

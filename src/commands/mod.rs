@@ -4,7 +4,7 @@
 pub mod workspace;
 pub mod project;
 pub mod models;
-mod utils;
+pub mod utils;
 mod utils_branch;
 mod utils_commit;
 mod utils_clean_workspace;

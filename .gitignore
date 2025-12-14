@@ -2,3 +2,5 @@
 .cargo/
 Cargo.lock
 README.md
+.git/
+.svn/

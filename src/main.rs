@@ -135,13 +135,13 @@ fn main() {
                 Commands::Commit { message } => handle_commit(&app, &message),
                 Commands::Review { revision } => handle_review(&app, &revision),
                 Commands::Revert { revision } => handle_revert(&app, &revision),
-                Commands::Branch { name, new, delete, restore } => handle_branch(&app, name.as_deref(), new, delete, restore),
+                Commands::Branch { name, new, delete, restore } => handle_branch(&app, name, new, delete, restore),
                 Commands::Pull { source } => handle_pull(&app, source.as_deref()),
                 Commands::Push { target } => handle_push(&app, target.as_deref()),
 
                 // Workspace
                 Commands::List { all } => handle_list(&app, all),
-                Commands::Switch { project_name, branch } => handle_switch(&app, project_name.as_deref(), branch.as_deref()),
+                Commands::Switch { project_name, branch } => handle_switch(&app, project_name.as_deref(), branch),
                 Commands::New { project_name, .. } => handle_new(&app, &project_name),
                 Commands::Delete { project_name, force } => handle_delete(&app, &project_name, force),
                 Commands::Restore { project_name } => handle_restore(&app, &project_name),

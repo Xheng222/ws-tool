@@ -15,7 +15,7 @@ use chrono::Local;
 // use colored::Colorize;
 use crossterm::style::Stylize;
 
-use crate::{commands::{models::{CommitResult, SVNLogType}, utils::{callback_for_log_xml, check_url_exists, format_relative_time, get_copy_source_rev}, utils_branch::{create_and_commit_to_branch, create_and_switch_to_branch, extract_branch_name_from_path, get_branch_source}, utils_clean_workspace::ensure_clean_workspace, utils_commit::{commit_with_conflict_resolution, resolve_conflicts}, workspace::handle_switch}, core::{app::App, error::{AppError, AppResult}, svn::{svn_copy, svn_delete, svn_merge, svn_revert, svn_switch, svn_update}, utils::parse_revision_arg}, ui::models::LogEntry};
+use crate::{commands::{models::{CommitResult, SVNLogType}, utils::{callback_for_log_xml, check_url_exists, format_relative_time, get_copy_source_rev, validate_folder_name}, utils_branch::{create_and_commit_to_branch, create_and_switch_to_branch, extract_branch_name_from_path, get_branch_source}, utils_clean_workspace::ensure_clean_workspace, utils_commit::{commit_with_conflict_resolution, resolve_conflicts}, workspace::handle_switch}, core::{app::App, error::{AppError, AppResult}, svn::{svn_copy, svn_delete, svn_merge, svn_revert, svn_switch, svn_update}, utils::parse_revision_arg}, ui::models::LogEntry};
 
 /// 查看项目的提交历史
 pub fn handle_log(app: &App, all: bool) -> AppResult<()> {
@@ -257,13 +257,13 @@ pub fn handle_commit(app: &App, commit_message: &Option<String>) -> AppResult<()
 }
 
 /// 创建新分支并切换过去，或者删除分支
-pub fn handle_branch(app: &App, new_branch_name: Option<&str>, is_new: bool, is_delete: bool, is_restore: bool) -> AppResult<()> {
+pub fn handle_branch(app: &App, new_branch_name: Option<String>, is_new: bool, is_delete: bool, is_restore: bool) -> AppResult<()> {
     if let Some(branch_name) = new_branch_name {
+        validate_folder_name(&branch_name)?;
         if is_restore {
             // check branch name
             app.ui.update_step("checking branch");
-            let branch_url = app.svn_ctx.get_branch_url(branch_name);
-
+            let branch_url = app.svn_ctx.get_branch_url(&branch_name);
             match check_url_exists(&branch_url) {
                 Ok(exists) => {
                     if exists {
@@ -310,10 +310,10 @@ pub fn handle_branch(app: &App, new_branch_name: Option<&str>, is_new: bool, is_
             let source_url = format!("{}@{}", branch_url, restore_rev);
             svn_copy(&[&source_url, &branch_url, "-m", &format!("Restore branch {}", branch_name)])?;
             
-            app.ui.success(&format!("Branch {} restored successfully", branch_name.yellow().bold()));
+            app.ui.success(&format!("Branch {} restored successfully", branch_name.clone().yellow().bold()));
             let switch = app.ui.selector_yes_or_no("Switch to the restored branch?")?;
             if switch {
-                app.ui.update_step(&format!("Switching to branch {}", branch_name.yellow().bold()));
+                app.ui.update_step(&format!("Switching to branch {}", branch_name.clone().yellow().bold()));
                 handle_switch(app, None, Some(branch_name))?;
             }
         }
@@ -330,7 +330,7 @@ pub fn handle_branch(app: &App, new_branch_name: Option<&str>, is_new: bool, is_
                 return Ok(());
             }
 
-            let branch_url = app.svn_ctx.get_branch_url(branch_name);
+            let branch_url = app.svn_ctx.get_branch_url(&branch_name);
             match check_url_exists(&branch_url) {
                 Ok(exists) => {
                     if !exists {
@@ -352,8 +352,8 @@ pub fn handle_branch(app: &App, new_branch_name: Option<&str>, is_new: bool, is_
             return Ok(());
         } 
         else if is_new {
-            app.ui.update_step(&format!("Creating and switching to branch {}", branch_name.yellow().bold()));
-            create_and_switch_to_branch(app, branch_name)?;
+            app.ui.update_step(&format!("Creating and switching to branch {}", branch_name.clone().yellow().bold()));
+            create_and_switch_to_branch(app, &branch_name)?;
             app.ui.success(&format!("Now on branch {}", branch_name.yellow().bold()));
         }
     } else {
@@ -369,6 +369,7 @@ pub fn handle_pull(app: &App, source_arg: Option<&str>) -> AppResult<()> {
         && source_name != app.svn_ctx.get_current_branch_name()? { // 指定了分支，且不是当前分支，进行合并
         // check source arg
         app.ui.update_step("Merging changes from branch");
+        validate_folder_name(source_name)?;
         let source_url = if source_name == "trunk" {
             app.svn_ctx.get_current_trunk_url()
         } else {
@@ -421,9 +422,10 @@ pub fn handle_push(app: &App, target_arg: Option<&str>) -> AppResult<()> {
     if let Some(target_name) = target_arg 
         && !target_name.trim().is_empty() 
         && target_name != app.svn_ctx.get_current_branch_name()? { // 指定了分支，且不是当前分支，进行合并
-
         // check target arg
         app.ui.update_step("Checking target branch");
+        validate_folder_name(target_name)?;
+
         let target_url = if target_name == "trunk" {
             app.svn_ctx.get_current_trunk_url()
         } else {
@@ -470,3 +472,4 @@ pub fn handle_push(app: &App, target_arg: Option<&str>) -> AppResult<()> {
 
     Ok(())
 }
+

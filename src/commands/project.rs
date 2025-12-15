@@ -259,7 +259,7 @@ pub fn handle_commit(app: &App, commit_message: &Option<String>) -> AppResult<()
 /// 创建新分支并切换过去，或者删除分支
 pub fn handle_branch(app: &App, new_branch_name: Option<String>, is_new: bool, is_delete: bool, is_restore: bool) -> AppResult<()> {
     if let Some(branch_name) = new_branch_name {
-        validate_folder_name(&branch_name)?;
+        validate_folder_name(&branch_name, false)?;
         if is_restore {
             // check branch name
             app.ui.update_step("checking branch");
@@ -369,7 +369,7 @@ pub fn handle_pull(app: &App, source_arg: Option<&str>) -> AppResult<()> {
         && source_name != app.svn_ctx.get_current_branch_name()? { // 指定了分支，且不是当前分支，进行合并
         // check source arg
         app.ui.update_step("Merging changes from branch");
-        validate_folder_name(source_name)?;
+        validate_folder_name(source_name, true)?;
         let source_url = if source_name == "trunk" {
             app.svn_ctx.get_current_trunk_url()
         } else {
@@ -424,7 +424,7 @@ pub fn handle_push(app: &App, target_arg: Option<&str>) -> AppResult<()> {
         && target_name != app.svn_ctx.get_current_branch_name()? { // 指定了分支，且不是当前分支，进行合并
         // check target arg
         app.ui.update_step("Checking target branch");
-        validate_folder_name(target_name)?;
+        validate_folder_name(target_name, true)?;
 
         let target_url = if target_name == "trunk" {
             app.svn_ctx.get_current_trunk_url()

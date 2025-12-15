@@ -87,7 +87,7 @@ enum Commands {
         /// 模糊匹配名称 (传统用法)
         project_name: Option<String>,
 
-        /// [新增] 指定目标分支
+        /// 指定目标分支
         #[arg(short, long)]
         branch: Option<String>,
     },

@@ -9,7 +9,7 @@ use crate::{commands::{models::BranchInfo, utils::{check_url_exists, validate_fo
 /// 基于当前版本创建并切换到新分支，不会有版本冲突
 pub fn create_and_switch_to_branch(app: &App, branch_name: &str) -> AppResult<()> {
     // Validate branch name
-    validate_folder_name(branch_name)?;
+    validate_folder_name(branch_name, false)?;
 
     // New branch URL
     let project_root_url = app.svn_ctx.get_current_project_repo_root_url();

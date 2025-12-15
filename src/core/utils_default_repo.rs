@@ -14,7 +14,7 @@ pub fn get_repo_path(repo_name: Option<&str>) -> AppResult<std::path::PathBuf> {
     )?;
     
     if let Some(repo) = repo_name {
-        validate_folder_name(repo)?;
+        validate_folder_name(repo, true)?;
         return Ok(exe_dir.join(repo));
     }
     else {

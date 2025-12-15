@@ -121,24 +121,26 @@ pub fn check_project_exists(ctx: &SvnContext, target_url: &str, project_name: &s
 }
 
 /// 验证文件夹名称是否合法
-pub fn validate_folder_name(name: &str) -> AppResult<()> {
-    if name.trim().is_empty() {
+pub fn validate_folder_name(name: &str, only_path_check: bool) -> AppResult<()> {
+    let trimed_name = name.trim();
+    if trimed_name.is_empty() {
         return Err(AppError::Validation("Name cannot be empty".to_string()));
     }
 
-    let lower_name = name.trim().to_lowercase();
-    match lower_name.as_str() {
-        "trunk" | "branches" | "tags" => {
-            return Err(AppError::Validation(
-                format!(
-                    "Invalid branch name: {}, {} is a reserved keyword.", 
-                    name.yellow().bold(), name.yellow().bold()
-                )
-            ));
+    if !only_path_check {
+        match trimed_name {
+            "trunk" | "branches" | "tags" => {
+                return Err(AppError::Validation(
+                    format!(
+                        "Invalid branch name: {}, {} is a reserved keyword.", 
+                        name.yellow().bold(), name.yellow().bold()
+                    )
+                ));
+            }
+            _ => {}
         }
-        _ => {}
     }
-    
+
     let re = Regex::new(r"^[a-zA-Z0-9_\-\.]+$").unwrap();
     if !re.is_match(name) {
         return Err(AppError::Validation(

@@ -97,7 +97,7 @@ pub fn handle_list(app: &App, list_all: bool) -> AppResult<()> {
 
 /// 在工作区中创建一个新项目
 pub fn handle_new(app: &App, project_name: &str) -> AppResult<()> {
-    validate_folder_name(project_name)?;
+    validate_folder_name(project_name, true)?;
     
     let project_root_url = app.svn_ctx.get_project_root_url(project_name);
     app.ui.update_step("Checking project existence");
@@ -144,8 +144,8 @@ pub fn handle_switch(app: &App, project_name: Option<&str>, branch: Option<Strin
     app.ui.update_step("Parsing target project");
     let target_project = project_name.unwrap_or(app.svn_ctx.get_current_project_name());
     let target_branch = branch.unwrap_or(app.svn_ctx.get_current_branch_name()?);
-    validate_folder_name(target_project)?;
-    validate_folder_name(&target_branch)?;
+    validate_folder_name(target_project, true)?;
+    validate_folder_name(&target_branch, true)?;
     let target_subpath = if target_branch == "trunk" { target_branch } else { format!("branches/{}", target_branch) };
     let target_full_url = format!("{}/{}/{}", app.svn_ctx.get_repo_root_url(), target_project, target_subpath);
 
@@ -262,7 +262,7 @@ pub fn handle_delete(app: &App, project_name: &str, force: bool) -> AppResult<()
         return Err(AppError::Validation("Cannot delete the current project. Please switch to another project first".to_string()));
     }
 
-    validate_folder_name(project_name)?;
+    validate_folder_name(project_name, true)?;
 
     let target_url = app.svn_ctx.get_project_root_url(project_name);
     let project_status = check_project_exists(&app.svn_ctx, &target_url, project_name, false)?;
@@ -295,7 +295,7 @@ pub fn handle_delete(app: &App, project_name: &str, force: bool) -> AppResult<()
 
 /// 恢复被删除的项目
 pub fn handle_restore(app: &App, project_name: &str) -> AppResult<()> {
-    validate_folder_name(project_name)?;
+    validate_folder_name(project_name, true)?;
 
     let target_url = format!("{}/{}", app.svn_ctx.get_repo_root_url(), project_name);
 

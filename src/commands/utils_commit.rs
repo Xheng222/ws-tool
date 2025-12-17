@@ -46,17 +46,22 @@ fn svn_add_and_delete() -> AppResult<()> {
             continue;
         } else {
             if is_dir {
-               let walker = build_folder_walker(&item)?;
-               for result in walker {
-                   if let Ok(entry) = result {
-                       let sub_path = entry.path();
-                       adds.push(sub_path.to_path_buf());
-                   }
-               }
-            } else {
+                // 如果是目录，直接看目录里面的内容是否需要添加
+                // 目录本身无需添加，只要里面的文件添加了，目录就会被 SVN 跟踪
+                let walker = build_folder_walker(&item)?;
+                for result in walker {
+                    if let Ok(entry) = result {
+                        let sub_path = entry.path();
+                        adds.push(sub_path.to_path_buf());
+                    }
+                }
+            }
+            else {
+                // 文件，直接处理
                 adds.push(item.to_path_buf());
             }
         }
+
     }
 
     if !adds.is_empty() {

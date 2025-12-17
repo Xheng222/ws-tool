@@ -8,7 +8,7 @@ use chrono::{DateTime, Local};
 use crossterm::style::Stylize;
 use regex::Regex;
 
-use crate::{commands::{models::{ProjectStatus, SVNLogType}, utils_ignore::{auto_sync_ignore_rules, build_ignore_matcher}}, core::{app::App, context::SvnContext, error::{AppError, AppResult}, svn::{StatusType, svn_info, svn_log, svn_status}}};
+use crate::{commands::{models::{ProjectStatus, SVNLogType}, utils_ignore::{auto_sync_ignore_rules, build_folder_walker, build_ignore_matcher}}, core::{app::App, context::SvnContext, error::{AppError, AppResult}, svn::{StatusType, svn_info, svn_log, svn_status}}};
 
 /// 格式化相对时间显示
 pub fn format_relative_time(iso_time: &str) -> String {
@@ -141,7 +141,7 @@ pub fn validate_folder_name(name: &str, only_path_check: bool) -> AppResult<()> 
         }
     }
 
-    let re = Regex::new(r"^[a-zA-Z0-9_\-\.]+$").unwrap();
+    let re = Regex::new(r#"^(?:[^\x00-\x1F<>:"/\\|?*\x7F]|[^\x00-\x1F<>:"/\\|?*\x7F][^\x00-\x1F<>:"/\\|?*\x7F]{0,253}[^\x00-\x1F<>:"/\\|?*\x7F .])$"#).unwrap();
     if !re.is_match(name) {
         return Err(AppError::Validation(
             format!(
@@ -167,11 +167,28 @@ pub fn is_workspace_dirty() -> AppResult<bool> {
             let item = wc_status.attribute("item").unwrap_or("");
             
             match item {
-                "unversioned" => { // 对 'unversioned' 项进行忽略规则检查
+                "unversioned" | "ignored" => { // 对 'unversioned' 项进行忽略规则检查
                     let path = entry.attribute("path").unwrap_or(".");
                     let path = Path::new(path);
-                    if !gitignore.matched(path, path.is_dir()).is_ignore() {
-                        return Ok(true);
+                    let is_dir = path.is_dir();
+                    // 不忽略
+                    if !gitignore.matched(path, is_dir).is_ignore() {
+                        if is_dir {
+                            // 如果是目录，检查目录下的文件是否有未忽略的
+                            let walker = build_folder_walker(path)?;
+                            for result in walker {
+                                if let Ok(entry) = result {
+                                    let sub_path = entry.path();
+                                    if !gitignore.matched(sub_path, sub_path.is_dir()).is_ignore() {
+                                        return Ok(true);
+                                    }
+                                }
+                            }
+                        }
+                        else {
+                            // 文件，直接视为脏
+                            return Ok(true);
+                        }
                     }
                 }
                 "normal" | "none" | "external" => { 

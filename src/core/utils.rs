@@ -41,20 +41,20 @@ pub fn parse_revision_arg(input: &str) -> AppResult<Revision> {
 }
 
 pub fn auto_decode(input: &[u8]) -> AppResult<String> {
-    // First, try UTF-8, which is the most common.
     if let Ok(s) = String::from_utf8(input.to_vec()) {
         return Ok(s.trim().to_string());
     }
 
     // Fallback to chardetng for other encodings if UTF-8 fails.
-    let mut detector = chardetng::EncodingDetector::new();
-    detector.feed(input, true);
-    let encoding = detector.guess(None, true);
+    // let mut detector = chardetng::EncodingDetector::new();
+    // detector.feed(input, true);
+    // let (encoding, access) = detector.guess_assess(None, true);
+    // println!("Detected encoding: {}, confidence: {}", encoding.name(), access);
+    let encoding = encoding_rs::GBK; // Default to GBK if unsure
+
     let (decoded_bytes, _, had_errors) = encoding.decode(input);
 
     if had_errors {
-        // Even the fallback had errors, so we return an error.
-        // We use the From<FromUtf8Error> trait we defined earlier.
         return Err(String::from_utf8(vec![]).unwrap_err().into());
     }
     

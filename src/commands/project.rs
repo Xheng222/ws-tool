@@ -11,11 +11,13 @@
 //! 
 
 
+use std::env;
+
 use chrono::Local;
 // use colored::Colorize;
 use crossterm::style::Stylize;
 
-use crate::{commands::{models::{CommitResult, SVNLogType}, utils::{callback_for_log_xml, check_url_exists, format_relative_time, get_copy_source_rev, validate_folder_name}, utils_branch::{create_and_commit_to_branch, create_and_switch_to_branch, extract_branch_name_from_path, get_branch_source}, utils_clean_workspace::ensure_clean_workspace, utils_commit::{commit_with_conflict_resolution, resolve_conflicts}, workspace::handle_switch}, core::{app::App, error::{AppError, AppResult}, svn::{svn_copy, svn_delete, svn_merge, svn_revert, svn_switch, svn_update}, utils::parse_revision_arg}, ui::models::LogEntry};
+use crate::{commands::{models::{CommitResult, SVNLogType}, utils::{callback_for_log_xml, check_url_exists, format_relative_time, get_copy_source_rev, validate_folder_name}, utils_branch::{create_and_commit_to_branch, create_and_switch_to_branch, extract_branch_name_from_path, get_branch_source}, utils_clean_workspace::ensure_clean_workspace, utils_commit::{commit_with_conflict_resolution, resolve_conflicts}, utils_windows::refresh_explorer_view, workspace::handle_switch}, core::{app::App, error::{AppError, AppResult}, svn::{svn_copy, svn_delete, svn_merge, svn_revert, svn_switch, svn_update}, utils::parse_revision_arg}, ui::models::LogEntry};
 
 /// 查看项目的提交历史
 pub fn handle_log(app: &App, all: bool) -> AppResult<()> {
@@ -70,7 +72,22 @@ pub fn handle_log(app: &App, all: bool) -> AppResult<()> {
                 message = format!("{} {}", "⎇ Branch created from".dark_green(), branch_info.green().bold());
                 is_rollback = false;
             }
-            else if let Some(source_branch) = &merge_source {
+            else if msg.starts_with("[WS-INIT]") {
+                // 直接忽略初始化的提交
+                continue;
+            }
+            else if msg.starts_with("[WS-INIT-GITIGNORE]") {
+                // 初始化 .gitignore 的提交，作为仓库最初的提交，显示为 Init
+                message = format!("Init {}", app.svn_ctx.get_current_project_name().yellow().bold());
+                is_rollback = false;
+            }
+            else if msg.starts_with("[WS-RESOLV-GITIGNORE]") {
+                // 处理 .gitignore externals 的提交，直接忽略
+                continue;
+            }
+            else
+            
+            if let Some(source_branch) = &merge_source {
                 message = format!("{} {}", "⇄ Merged from".dark_cyan(), source_branch.clone().cyan().bold());
                 is_rollback = false;
             }
@@ -143,6 +160,7 @@ pub fn handle_review(app: &App, revision_str: &str) -> AppResult<()> {
         }
     }
 
+    refresh_explorer_view(&env::current_dir()?);
     app.ui.success(&format!("Review history for revision {}", target_rev.to_string().yellow().bold()));
     Ok(())
 }

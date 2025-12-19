@@ -1,18 +1,18 @@
 //! SVN 提交相关工具函数
 //!
 
+use std::path::PathBuf;
+
 use crossterm::style::Stylize;
 
-use crate::{commands::{models::{CommitResult, ConflictItem, ConflictKind}, utils_ignore::{auto_sync_ignore_rules, build_ignore_matcher, build_folder_walker, set_remaining_unversioned_as_ignored}}, core::{app::App, error::{AppError, AppResult}, svn::{StatusType, svn_add, svn_cleanup, svn_commit, svn_delete, svn_resolve, svn_revert, svn_status, svn_update}}};
+use crate::{commands::{models::{CommitResult, ConflictItem, ConflictKind}, utils_ignore::{auto_sync_ignore_rules, build_folder_walker, build_ignore_matcher, set_remaining_unversioned_as_ignored}}, core::{app::App, error::{AppError, AppResult}, svn::{StatusType, svn_add, svn_cleanup, svn_commit, svn_delete, svn_resolve, svn_revert, svn_status, svn_update}}};
 
 /// ### svn add and delete
 /// 添加新文件和删除缺失文件
-fn svn_add_and_delete() -> AppResult<()> {
-    auto_sync_ignore_rules()?;
+fn svn_add_and_delete(app: &App) -> AppResult<()> {
+    auto_sync_ignore_rules(app.svn_ctx.get_current_project_name())?;
 
-    // return Err(AppError::OperationCancelled);
-
-    let ignore_matcher = build_ignore_matcher()?;
+    let ignore_matcher = build_ignore_matcher(&PathBuf::from("."), &PathBuf::from("."))?;
     let xml_str = svn_status(StatusType::CheckIgnore)?;
     let doc = roxmltree::Document::parse(&xml_str)?;
 
@@ -73,7 +73,7 @@ fn svn_add_and_delete() -> AppResult<()> {
         svn_delete(&dels)?;
     }
 
-    set_remaining_unversioned_as_ignored()?;
+    set_remaining_unversioned_as_ignored(app.svn_ctx.get_current_project_name())?;
 
     Ok(())
 }
@@ -190,7 +190,7 @@ fn update_and_resolve_conflicts(app: &App) -> AppResult<()> {
 /// 提交更改，包含冲突解决流程
 pub fn commit_with_conflict_resolution(app: &App, commit_message: &str) -> AppResult<CommitResult> {
     // 1. Add and Delete
-    svn_add_and_delete()?;
+    svn_add_and_delete(app)?;
 
     // 2. Update and Resolve Conflicts
     update_and_resolve_conflicts(app)?;

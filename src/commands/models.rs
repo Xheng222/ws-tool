@@ -14,12 +14,14 @@ pub enum SVNLogType {
     /// - 有 message 字段
     /// - 没有 path 字段
     /// - xml 格式
+    /// - --stop-on-copy
     WsLog,
 
     /// ws log 完整日志
     /// - 有 message 字段
     /// - 有 path 字段
     /// - xml 格式
+    /// - 没有 --stop-on-copy
     WsLogFull,
 }
 

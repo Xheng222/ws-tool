@@ -2,7 +2,7 @@
 
 
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Local};
 use crossterm::style::Stylize;
@@ -155,11 +155,11 @@ pub fn validate_folder_name(name: &str, only_path_check: bool) -> AppResult<()> 
 }
 
 /// 使用忽略规则检查工作区是否脏
-pub fn is_workspace_dirty() -> AppResult<bool> {
+pub fn is_workspace_dirty(project_name: &str) -> AppResult<bool> {
     // 先同步忽略规则
-    auto_sync_ignore_rules()?;
+    auto_sync_ignore_rules(project_name)?;
     let xml_str = svn_status(StatusType::Commit)?;
-    let gitignore = build_ignore_matcher()?;
+    let gitignore = build_ignore_matcher(&PathBuf::from("."), &PathBuf::from("."))?;
     let doc = roxmltree::Document::parse(&xml_str)?;
 
     for entry in doc.descendants().filter(|n| n.has_tag_name("entry")) {

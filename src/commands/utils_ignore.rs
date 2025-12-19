@@ -10,13 +10,13 @@ use ignore::{Walk, gitignore::{Gitignore, GitignoreBuilder}};
 
 use crate::core::{error::{AppError, AppResult}, svn::{StatusType, svn_commit_externals, svn_commit_gitignore, svn_propdel, svn_propget, svn_propset, svn_status, svn_update}};
 
-pub fn build_ignore_matcher() -> AppResult<Gitignore> {
-    let root = Path::new(".");
-    let mut builder = GitignoreBuilder::new(root);
+/// 构建忽略规则匹配器
+pub fn build_ignore_matcher(target_path: &Path, gitignore_root_path: &Path) -> AppResult<Gitignore> {
+    let mut builder = GitignoreBuilder::new(target_path);
     
     // 加载 .gitignore
-    if root.join(".gitignore").exists() {
-        builder.add(root.join(".gitignore"));
+    if gitignore_root_path.join(".gitignore").exists() {
+        builder.add(gitignore_root_path.join(".gitignore"));
     }
     else {
         return Err(AppError::Validation(format!("No gitignore file!")));
@@ -25,6 +25,7 @@ pub fn build_ignore_matcher() -> AppResult<Gitignore> {
     Ok(builder.build()?)
 }
 
+/// 构建文件夹遍历器
 pub fn build_folder_walker(item: &Path) -> AppResult<Walk> {
     let filter = |entry: &ignore::DirEntry| {
         let path = entry.file_name();
@@ -49,7 +50,7 @@ pub fn build_folder_walker(item: &Path) -> AppResult<Walk> {
 }
 
 /// 自动同步 .gitignore 文件的修改
-pub fn auto_sync_ignore_rules() -> AppResult<()> {
+pub fn auto_sync_ignore_rules(project_name: &str) -> AppResult<()> {
     let xml_str = svn_status(StatusType::CheckGitignore)?;
     let doc = roxmltree::Document::parse(&xml_str)?;
 
@@ -66,11 +67,11 @@ pub fn auto_sync_ignore_rules() -> AppResult<()> {
         };
     }
     else {
-        // 没有 .gitignore 文件，使用 svn:external 从根目录链接一个
-        // svn propset svn:externals "^/.gitignore .gitignore" .
-        svn_propset(&["svn:externals", "^/.gitignore .gitignore", "."])?;
+        // 没有 .gitignore 文件，使用 svn:external 从项目根目录链接一个
+        // svn propset svn:externals "^/{project_name}/.gitignore .gitignore" .
+        svn_propset(&["svn:externals", &format!("^/{}/.gitignore .gitignore", project_name), "."])?;
         // 然后应该提交这个 externals 设置
-        svn_commit_externals()?;
+        svn_commit_externals(".", false)?;
         // 然后执行 svn update
         svn_update(&["."])?;
     }
@@ -79,7 +80,7 @@ pub fn auto_sync_ignore_rules() -> AppResult<()> {
 }
 
 /// 处理剩余的未受控文件
-pub fn set_remaining_unversioned_as_ignored() -> AppResult<()> {
+pub fn set_remaining_unversioned_as_ignored(project_name: &str) -> AppResult<()> {
     let xml_str = svn_status(StatusType::Commit)?;
     let doc = roxmltree::Document::parse(&xml_str)?;
     let mut ignore_targets: HashMap<&str, Vec<&str>> = HashMap::new();
@@ -107,7 +108,7 @@ pub fn set_remaining_unversioned_as_ignored() -> AppResult<()> {
                 // 处理 switched 状态的 .gitignore 文件，删除 svn:externals 属性，update 后重新设置
                 svn_propdel(&["svn:externals", "."])?;
                 svn_update(&["."])?;
-                svn_propset(&["svn:externals", "^/.gitignore .gitignore", "."])?;
+                svn_propset(&["svn:externals", &format!("^/{}/.gitignore .gitignore", project_name), "."])?;
                 svn_update(&["."])?;
             }
         }
@@ -131,12 +132,5 @@ pub fn set_remaining_unversioned_as_ignored() -> AppResult<()> {
     
     Ok(())
 }
-
-
-
-
-
-
-
 
 

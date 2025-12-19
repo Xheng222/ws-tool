@@ -1,6 +1,6 @@
 use std::env;
 
-use crate::{commands::utils::validate_folder_name, core::{error::{AppError, AppResult}, svn::svn_svnmucc, svn_repo::svnadmin_create}};
+use crate::{commands::utils::validate_folder_name, core::{error::{AppError, AppResult}, svn_repo::svnadmin_create}};
 
 
 /// 获取默认仓库路径 (exe 所在目录下的 "repo" 文件夹)
@@ -42,10 +42,10 @@ pub fn get_repo_url(repo_name: Option<&str>) -> AppResult<String> {
     }
 
     svnadmin_create(path.to_str().unwrap())?;
-    // 添加一个默认的 .gitignore 文件
-    svn_svnmucc(&[
-        "put", "NUL", &format!("{}/.gitignore", url),
-        "-m", "Add default .gitignore file",
+    // 添加一个默认的 .ws_empty 文件夹到仓库根目录，用于切换时清空工作副本
+    crate::core::svn::svn_svnmucc(&[
+        "mkdir", &format!("{}/.ws_empty", url),
+        "-m", "Add default .ws_empty folder",
     ])?;
 
     Ok(url)

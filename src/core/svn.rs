@@ -139,9 +139,14 @@ pub fn svn_commit_gitignore() -> AppResult<String> {
 
 /// ### svn commit for svn externals .gitignore
 /// 提交 .gitignore externals 设置的更改
-pub fn svn_commit_externals() -> AppResult<String> {
+pub fn svn_commit_externals(path: &str, is_new: bool) -> AppResult<String> {
     let mut command = Command::new("svn");
-    command.args(&["commit", ".", "-m", "Update svn:externals for .gitignore"]);
+    let message = if is_new {
+        "[WS-INIT-GITIGNORE] Set svn:externals for .gitignore"
+    } else {
+        "[WS-RESOLV-GITIGNORE] Update svn:externals for .gitignore"
+    };
+    command.args(&["commit", path, "-m", message]);
     let output = execute_command(command)?;
     Ok(auto_decode(&output.stdout)?)
 }

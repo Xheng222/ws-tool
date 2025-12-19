@@ -9,9 +9,6 @@ use super::{error::{AppResult, AppError}, svn::{svn_checkout, svn_info}, utils::
 
 #[derive(Debug)]
 pub struct SvnContext {
-    /// 当前工作副本的项目目录
-    /// {repo_url}/{project_name}/trunk 或 {repo_url}/{project_name}/branches/{branch_name}
-    // work_copy_root: String,
     /// 当前仓库 URL
     /// {repo_url}
     repo_root_url: String,
@@ -83,6 +80,16 @@ impl SvnContext {
     pub fn get_current_project_repo_root_url(&self) -> String {
         self.get_project_root_url(&self.current_project_name)
     }
+
+    /// 获取仓库名称
+    /// - {repo_name}
+    pub fn get_repo_name(&self) -> AppResult<String> {
+        if let Some(name) = self.repo_fs_path.file_name() {
+            Ok(name.to_string_lossy().to_string())
+        } else {
+            Err(AppError::Validation(format!("Cannot determine repository name")))
+        }
+    }
     
     /// 获取当前项目名称
     /// - {current_project_name}
@@ -103,7 +110,6 @@ impl SvnContext {
         } else {
             Ok("unknown".to_string())
         }
-        
     }
 
     /// 获取仓库在本地文件系统中的路径
@@ -123,7 +129,7 @@ impl SvnContext {
 
     /// 判断工作副本是否有未提交的更改
     pub fn is_dirty(&self) -> AppResult<bool> {
-        is_workspace_dirty()
+        is_workspace_dirty(&self.current_project_name)
     }
 
     /// 检查当前工作副本是否处于 Review 模式
@@ -164,13 +170,10 @@ pub fn get_svn_context() -> AppResult<SvnContext> {
     let project_name_encoded = parts.first().ok_or(AppError::Validation("Could not determine project name from relative URL".to_string()))?;
     let current_project_name = urlencoding::decode(project_name_encoded)?.to_string();
 
-    // let is_dirty = is_workspace_dirty()?;
-
     let current_revision = get_current_revision()?;
     let latest_revision = get_latest_revision()?;
 
     Ok(SvnContext {
-        // work_copy_root: work_copy_root_decode,
         repo_root_url: repo_root_url_decode,
         current_project_name,
         repo_fs_path,
@@ -183,11 +186,27 @@ pub fn check_and_repair_workspace(ctx: &SvnContext) -> AppResult<()> {
     let local_uuid = svn_info(&["--show-item", "repos-uuid"])?;
     let remote_uuid = svn_info(&["--show-item", "repos-uuid", &ctx.repo_root_url])?;
 
+
+
     if local_uuid != remote_uuid {
+        let current_work_copy_root = ctx.get_current_work_copy_root()?;
+        let target_path = match crate::commands::utils_windows::find_a_project_in_ws_store(&ctx.get_repo_name()?, &ctx.current_project_name)? {
+            Some(p) => p,
+            None => {
+                return Err(AppError::Validation(format!("Cannot find project '{}' in any .ws_store/{} folder to repair workspace", ctx.current_project_name, ctx.get_repo_name()?)));
+            }
+        };
+
+        // 删除 .svn
         if Path::new(".svn").exists() {
             std::fs::remove_dir_all(".svn")?;
         }
-        svn_checkout(&[&ctx.get_current_work_copy_root()?, ".", "--force"])?;
+        // 删除 .gitignore
+        let gitignore_path = Path::new(".gitignore");
+        if gitignore_path.exists() {
+            std::fs::remove_file(gitignore_path)?;
+        }
+        svn_checkout(&[&current_work_copy_root, target_path.to_string_lossy().as_ref(), "--force"])?;
     }
 
     Ok(())

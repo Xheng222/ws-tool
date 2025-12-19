@@ -27,6 +27,9 @@ pub enum AppError {
     UrlDecode(Utf8Error),
     /// An ignore error occurred.
     Ignore(ignore::Error),
+    /// Path strip prefix error
+    TripPrefixError(std::path::StripPrefixError)
+
 }
 
 impl fmt::Display for AppError {
@@ -50,6 +53,7 @@ impl fmt::Display for AppError {
             AppError::XmlParse(err) => write!(f, "XML Parsing Error: {}", err),
             AppError::UrlDecode(err) => write!(f, "URL/Path Decoding Error: {}", err),
             AppError::Ignore(err) => write!(f, "Ignore Error: {}", err),
+            AppError::TripPrefixError(err) => write!(f, "Path Strip Prefix Error: {}", err),
         }
     }
 }
@@ -81,6 +85,12 @@ impl From<Utf8Error> for AppError {
 impl From<ignore::Error> for AppError {
     fn from(err: ignore::Error) -> Self {
         AppError::Ignore(err)
+    }
+}
+
+impl From<std::path::StripPrefixError> for AppError {
+    fn from(err: std::path::StripPrefixError) -> Self {
+        AppError::TripPrefixError(err)
     }
 }
 

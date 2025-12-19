@@ -4,11 +4,11 @@
 //! 
 //! 
 
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 
 use ignore::{Walk, gitignore::{Gitignore, GitignoreBuilder}};
 
-use crate::core::{error::{AppError, AppResult}, svn::{StatusType, svn_commit_externals, svn_commit_gitignore, svn_propdel, svn_propget, svn_propset, svn_status, svn_update}};
+use crate::core::{error::{AppError, AppResult}, svn::{StatusType, svn_commit_externals, svn_commit_gitignore, svn_propdel, svn_propset, svn_status, svn_update}};
 
 /// 构建忽略规则匹配器
 pub fn build_ignore_matcher(target_path: &Path, gitignore_root_path: &Path) -> AppResult<Gitignore> {
@@ -83,26 +83,27 @@ pub fn auto_sync_ignore_rules(project_name: &str) -> AppResult<()> {
 pub fn set_remaining_unversioned_as_ignored(project_name: &str) -> AppResult<()> {
     let xml_str = svn_status(StatusType::Commit)?;
     let doc = roxmltree::Document::parse(&xml_str)?;
-    let mut ignore_targets: HashMap<&str, Vec<&str>> = HashMap::new();
+    // let mut ignore_targets: HashMap<&str, Vec<&str>> = HashMap::new();
 
     for entry in doc.descendants().filter(|n| n.has_tag_name("entry")) {
         if let Some(wc_status) = entry.children().find(|n| n.has_tag_name("wc-status")) {
-            let item = wc_status.attribute("item").unwrap_or("");
+            // let item = wc_status.attribute("item").unwrap_or("");
             // 只关注 'unversioned' 项
-            if item == "unversioned" {
-                let path = entry.attribute("path").unwrap_or("");
-                if let Some((parent, name)) = path.rsplit_once('\\') {
-                    ignore_targets.entry(parent)
-                        .or_default()
-                        .push(name);
-                }
-                else {
-                    ignore_targets.entry(".")
-                        .or_default()
-                        .push(path);
-                }
-            }
-            else if wc_status.has_attribute("switched") 
+            // if item == "unversioned" {
+            //     let path = entry.attribute("path").unwrap_or("");
+            //     if let Some((parent, name)) = path.rsplit_once('\\') {
+            //         ignore_targets.entry(parent)
+            //             .or_default()
+            //             .push(name);
+            //     }
+            //     else {
+            //         ignore_targets.entry(".")
+            //             .or_default()
+            //             .push(path);
+            //     }
+            // }
+            // else 
+            if wc_status.has_attribute("switched") 
                 && wc_status.attribute("switched").unwrap_or("") == "true"
                 && entry.attribute("path").unwrap_or("") == ".gitignore" {
                 // 处理 switched 状态的 .gitignore 文件，删除 svn:externals 属性，update 后重新设置
@@ -114,21 +115,21 @@ pub fn set_remaining_unversioned_as_ignored(project_name: &str) -> AppResult<()>
         }
     }
     
-    for (parent, names) in ignore_targets {
-        let origin_value = match svn_propget(&["svn:ignore", parent]) {
-            Ok(val) => val.trim().replace("\r\n", "\n"),
-            Err(e) => {
-                if let AppError::SvnCommandFailed { .. } = e {
-                    "".to_string()
-                }
-                else {
-                    return Err(e);
-                }
-            },
-        };
-        let final_value = format!("{}\n{}", names.join("\n"), origin_value);
-        svn_propset(&["svn:ignore", &final_value, parent])?;
-    }
+    // for (parent, names) in ignore_targets {
+    //     let origin_value = match svn_propget(&["svn:ignore", parent]) {
+    //         Ok(val) => val.trim().replace("\r\n", "\n"),
+    //         Err(e) => {
+    //             if let AppError::SvnCommandFailed { .. } = e {
+    //                 "".to_string()
+    //             }
+    //             else {
+    //                 return Err(e);
+    //             }
+    //         },
+    //     };
+    //     let final_value = format!("{}\n{}", names.join("\n"), origin_value);
+    //     svn_propset(&["svn:ignore", &final_value, parent])?;
+    // }
     
     Ok(())
 }

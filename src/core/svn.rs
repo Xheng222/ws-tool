@@ -225,7 +225,7 @@ pub fn svn_resolve(resolve_args: &[&str]) -> AppResult<()> {
 
 /// ### svn propget
 /// 获取属性值
-pub fn svn_propget(prop_args: &[&str]) -> AppResult<String> {
+pub fn _svn_propget(prop_args: &[&str]) -> AppResult<String> {
     let mut command = Command::new("svn");
     command.arg("propget").args(prop_args);
     let output = execute_command(command)?;

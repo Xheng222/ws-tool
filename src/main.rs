@@ -68,12 +68,13 @@ enum Commands {
         source: Option<String>,
     },
     /// Push local commits to the repository, or push to a specified branch
-    /// Usage: push [target_branch]
     Push {
         /// Target branch name (e.g., trunk). If not provided, a regular Commit is performed
         #[arg(short, long)]
         target: Option<String>,
     },
+
+    // Workspace commands
 
     /// List active projects in the repository
     List {
@@ -81,25 +82,26 @@ enum Commands {
         #[arg(short, long, default_value_t = false)]
         all: bool,
     },
-    /// Switch to a specified project and branch at the latest revision
-    Switch {
-        /// The target project name; if not specified, defaults to the current project
-        project_name: Option<String>,
-
-        /// The target branch name; if not specified, defaults to the current branch of that project
-        #[arg(short, long)]
-        branch: Option<String>,
-    },
-    
     /// Add a new empty project to the repository
     New {
         /// The name of the new project to create
         project_name: String,
 
-        /// When there is no .svn folder in current directory, specify the repo name to create the project in.
+        /// When there is no .svn folder in current directory, specify the repo name to create the project in
         #[arg(short, long)]
         repo: Option<String>,
     },
+    /// Check out an existing project from the repository
+    Checkout {
+        /// The name of the project to check out
+        project_name: String,
+        /// When there is no .svn folder in current directory, specify the repo name to check out the project from
+        /// When there is a .svn folder, this parameter is ignored, and the current repo is used, it's same as switching projects
+        #[arg(short, long)]
+        repo: Option<String>,
+    },
+    /// Uncheck out from the current project, delete the working directory
+    Uncheckout {},
     /// Delete an existing project.
     Delete {
         /// The name of the project to delete
@@ -114,6 +116,18 @@ enum Commands {
         /// The name of the project to restore
         project_name: String,
     },
+    /// Switch to a specified project and branch at the latest revision
+    Switch {
+        /// The target project name; if not specified, defaults to the current project
+        project_name: Option<String>,
+
+        /// The target branch name; if not specified, defaults to the current branch of that project
+        #[arg(short, long)]
+        branch: Option<String>,
+    },
+    
+
+
 
     // Debug: (internal use only)
     // Usage: debug
@@ -159,7 +173,8 @@ fn main() {
                 Commands::New { project_name, .. } => handle_new(&app, &project_name),
                 Commands::Delete { project_name, force } => handle_delete(&app, &project_name, force),
                 Commands::Restore { project_name } => handle_restore(&app, &project_name),
-
+                Commands::Checkout { project_name, .. } => handle_checkout(&app, &project_name),
+                Commands::Uncheckout {} => handle_uncheckout(&app),
                 // Others
                 _ => Ok(()), // Placeholder for other commands
             };
@@ -190,6 +205,21 @@ fn main() {
                                 }
                             }
                             
+                        },
+                        Commands::Checkout { project_name, repo } => {
+                            let app = match App::default(repo.as_deref()) {
+                                Ok(a) => a,
+                                Err(e) => {
+                                    eprintln!("Error initializing application: {}", e);
+                                    return;
+                                }
+                            };
+                            if let Err(e) = handle_checkout(&app, &project_name) {
+                                match e {
+                                    AppError::OperationCancelled => app.ui.success("Operation cancelled by user."),
+                                    _ => app.ui.error(&format!("{}", e)),
+                                }
+                            }
                         },
                         Commands::LinkFolder { project_name, origin_dir_path: vault_target_path } => { let _ = handle_link_folder(&project_name, &vault_target_path); },
                         _ => {

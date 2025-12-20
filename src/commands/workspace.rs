@@ -17,7 +17,7 @@ use crossterm::style::Stylize;
 
 use crate::{
     commands::{
-        models::{ProjectStatus, SVNLogType}, utils::{callback_for_log_xml, check_project_exists, check_url_exists, validate_folder_name}, utils_branch::get_project_branches, utils_clean_workspace::ensure_clean_workspace, utils_windows::{find_a_project_in_ws_store, launch_terminal, make_symlink, refresh_explorer_view, report_error_gui, set_hidden_attribute, spawn_internal_switcher, switch_project_via_symlink}
+        models::{ProjectStatus, SVNLogType}, utils::{callback_for_log_xml, check_project_exists, check_url_exists, validate_folder_name}, utils_branch::get_project_branches, utils_clean_workspace::ensure_clean_workspace, utils_file::{ChangeLockType, change_lock_file, check_is_empty_folder, ensure_delete, get_lock_file_path}, utils_windows::{find_a_project_in_ws_store, launch_terminal, make_symlink, refresh_explorer_view, remove_symlink, report_error_gui, set_hidden_attribute, spawn_internal_switcher, switch_project_via_symlink}
     },
     core::{
         app::App, context::check_and_repair_workspace, error::{AppError, AppResult}, svn::{svn_checkout, svn_cleanup, svn_cleanup_workspace, svn_commit_externals, svn_copy, svn_delete, svn_list, svn_mkdir, svn_propset, svn_svnmucc, svn_switch, svn_update}, svn_repo::{svnadmin_create, svnadmin_dump, svnadmin_load, svndumpfilter}
@@ -100,8 +100,9 @@ pub fn handle_new(app: &App, project_name: &str) -> AppResult<()> {
     validate_folder_name(project_name, true)?;
     
     let project_root_url = app.svn_ctx.get_project_root_url(project_name);
+    let project_exists = check_url_exists(&project_root_url)?;
     app.ui.update_step("Checking project existence");
-    if check_url_exists(&project_root_url)? {
+    if project_exists {
         app.ui.success(&format!("Project {} already exists, nothing to do.", project_name.yellow().bold()));
     }
     else {
@@ -133,7 +134,7 @@ pub fn handle_new(app: &App, project_name: &str) -> AppResult<()> {
             set_hidden_attribute(&ws_store_path)?;
         }
         svn_checkout(&[&trunk_url, project_dir.to_string_lossy().as_ref()])?;
-        // checkout 成功了，有 .svn 目录了，链接根目录的 .gitignore 文件
+        // checkout 成功，有 .svn 目录了，链接根目录的 .gitignore 文件
         svn_propset(&["svn:externals", &format!("^/{}/.gitignore .gitignore", project_name), project_dir.to_string_lossy().as_ref()])?;
         // 更新 externals
         svn_update(&[project_dir.to_string_lossy().as_ref()])?;
@@ -144,8 +145,12 @@ pub fn handle_new(app: &App, project_name: &str) -> AppResult<()> {
     }
 
     if app.svn_ctx.get_current_project_name().is_empty() {
-        // 当前没有项目，移动整个文件夹的内容到 .ws_store/{project_name}，并创建传送门
-        spawn_internal_switcher(project_name, &app.svn_ctx.get_repo_name()?)?;
+        if project_exists {
+            app.ui.info("Use 'ws checkout <project_name>' to switch to the project.");
+        }
+        else {
+            spawn_internal_switcher(project_name, &app.svn_ctx.get_repo_name()?)?;
+        }
     }
     else {
         // 当前已有项目，询问是否切换过去
@@ -155,6 +160,100 @@ pub fn handle_new(app: &App, project_name: &str) -> AppResult<()> {
         }
     }
 
+    Ok(())
+}
+
+/// 检出一个项目到工作区
+pub fn handle_checkout(app: &App, project_name: &str) -> AppResult<()> {
+    validate_folder_name(project_name, true)?;
+
+    app.ui.update_step("Checking project existence");
+    let project_trunk_url = app.svn_ctx.get_project_trunk_url(project_name);
+    let project_exists = check_url_exists(&project_trunk_url)?;
+
+    if !project_exists {
+        app.ui.error(&format!("Project {} does not exist.", project_name.yellow().bold()));
+        return Ok(());
+    }
+
+    if app.svn_ctx.get_current_project_name().is_empty() { // 当前没有项目，直接切换过去
+        if !check_is_empty_folder(&env::current_dir()?)? {
+            app.ui.error("Current directory is not empty. Please switch to an empty directory before checking out a project");
+            return Ok(());
+        }
+
+        // 查找 .ws_store/{repo_name}/{project_name}/.svn 是否存在，如果不存在则 checkout
+        let target_path = match find_a_project_in_ws_store(&app.svn_ctx.get_repo_name()?, project_name)? {
+            Some(p) => p,
+            None => {
+                return Err(AppError::Validation(format!("Project {} is not found in any workspace", project_name.yellow().bold())));
+            }
+        };
+        let svn_dir = target_path.join(".svn");
+        if !svn_dir.exists() {
+            app.ui.update_step("Checking out the project");
+            svn_checkout(&[&project_trunk_url, target_path.to_string_lossy().as_ref()])?;
+        }
+
+        spawn_internal_switcher(project_name, &app.svn_ctx.get_repo_name()?)?;
+    }
+    else {
+        handle_switch(app, Some(project_name), None)?;
+    }
+    Ok(())
+}
+
+/// 取消当前工作区的项目检出
+pub fn handle_uncheckout(app: &App) -> AppResult<()> {
+    let current_project_name = app.svn_ctx.get_current_project_name();
+    if current_project_name.is_empty() {
+        app.ui.info("No project is currently checked out.");
+        return Ok(());
+    }
+
+    app.ui.update_step("Save changes");
+    ensure_clean_workspace(app)?;
+
+    app.ui.update_step("Cleanup workspace");
+    svn_cleanup_workspace()?;
+
+    let current_project_path = match find_a_project_in_ws_store(&app.svn_ctx.get_repo_name()?, app.svn_ctx.get_current_project_name())? {
+        Some(p) => p,
+        None => {
+            return Err(AppError::Validation(format!("Current project {} is not checked out in any workspace.", app.svn_ctx.get_current_project_name().yellow().bold())));
+        }
+    };
+
+    let current_lock_file_path = get_lock_file_path(
+        current_project_path.parent().ok_or(AppError::Validation(format!("No parent folder found")))?, 
+        app.svn_ctx.get_current_project_name()
+    )?;
+
+    // lock 文件减 1
+    let current_lock_value = change_lock_file(&current_lock_file_path, ChangeLockType::Sub)?;
+    // 如果 lock 值变为 0，说明没有其他工作区在使用该项目，可以清理当前工作区
+    if current_lock_value == 0 {
+        // 切换到 .ws_empty
+        let empty_url = format!("{}/.ws_empty", app.svn_ctx.get_repo_root_url());
+        svn_switch(&empty_url)?;
+
+        // 删除 .svn 目录
+        let svn_dir = std::env::current_dir()?.join(".svn");
+        if svn_dir.exists() {
+            fs::remove_dir_all(svn_dir)?;
+        }
+
+        // 删除 .gitignore 文件
+        let gitignore_path = std::env::current_dir()?.join(".gitignore");
+        if gitignore_path.exists() {
+            fs::remove_file(gitignore_path)?;
+        }
+    }
+
+    // 删除软链接
+    remove_symlink(&env::current_dir()?)?;
+
+    app.ui.success(&format!("Unchecked out from project {}", current_project_name.yellow().bold()));
     Ok(())
 }
 
@@ -188,23 +287,52 @@ pub fn handle_switch(app: &App, project_name: Option<&str>, branch: Option<Strin
     app.ui.update_step(&format!("Switching to {}", target_project));
     // 如果是跨项目移动，用软链接先把项目切换过去
     if target_project != app.svn_ctx.get_current_project_name() {
-        // 首先切换到仓库根目录的 .ws_empty 文件夹，以清空当前工作副本，最后删除 .svn 目录，.gitignore 也要删除
-        let empty_url = format!("{}/.ws_empty", app.svn_ctx.get_repo_root_url());
-        svn_switch(&empty_url)?;
-        let svn_dir = std::env::current_dir()?.join(".svn");
-        if svn_dir.exists() {
-            fs::remove_dir_all(svn_dir)?;
-        }
-        let gitignore_path = std::env::current_dir()?.join(".gitignore");
-        if gitignore_path.exists() {
-            fs::remove_file(gitignore_path)?;
+        let current_project_path = match find_a_project_in_ws_store(&app.svn_ctx.get_repo_name()?, app.svn_ctx.get_current_project_name())? {
+            Some(p) => p,
+            None => {
+                return Err(AppError::Validation(format!("Current project {} is not checked out in any workspace.", app.svn_ctx.get_current_project_name().yellow().bold())));
+            }
+        };
+        let target_project_path = match find_a_project_in_ws_store(&app.svn_ctx.get_repo_name()?, target_project)? {
+            Some(p) => p,
+            None => {
+                return Err(AppError::Validation(format!("Target project {} is not checked out in any workspace.", target_project.yellow().bold())));
+            }
+        };
+        let current_lock_file_path = get_lock_file_path(
+            current_project_path.parent().ok_or(AppError::Validation(format!("No parent folder found")))?, 
+            app.svn_ctx.get_current_project_name()
+        )?;
+        let target_lock_file_path = get_lock_file_path(
+            target_project_path.parent().ok_or(AppError::Validation(format!("No parent folder found")))?, 
+            target_project
+        )?;
+
+        let current_lock_value = change_lock_file(&current_lock_file_path, ChangeLockType::Sub)?;
+        let target_lock_value = change_lock_file(&target_lock_file_path, ChangeLockType::Add)?;
+        // 如果当前项目的 lock 值变为 0，说明没有其他工作区在使用该项目，可以清理当前工作区
+        if current_lock_value == 0 {
+            // 首先切换到仓库根目录的 .ws_empty 文件夹，以清空当前工作副本，最后删除 .svn 目录，.gitignore 也要删除
+            let empty_url = format!("{}/.ws_empty", app.svn_ctx.get_repo_root_url());
+            svn_switch(&empty_url)?;
+            let svn_dir = std::env::current_dir()?.join(".svn");
+            if svn_dir.exists() {
+                fs::remove_dir_all(svn_dir)?;
+            }
+            let gitignore_path = std::env::current_dir()?.join(".gitignore");
+            if gitignore_path.exists() {
+                fs::remove_file(gitignore_path)?;
+            }
         }
 
         // 软链接切换项目
-        let target_path = switch_project_via_symlink(app, target_project)?;
+        switch_project_via_symlink(&target_project_path)?;
         
-        // 由于没有 .svn 目录，使用 svn checkout 到目标项目的指定分支
-        svn_checkout(&[&target_full_url, target_path.to_string_lossy().as_ref(), "--force"])?;
+        // 如果目标项目的 lock 值为 1，说明没有其他工作区在使用该项目，应该做 checkout
+        if target_lock_value == 1 {
+            app.ui.update_step("Checking out target project");
+            svn_checkout(&[&target_full_url, target_project_path.to_string_lossy().as_ref(), "--force"])?;
+        }
     }
     else {
         // 项目内直接 svn switch 到指定的分支
@@ -305,6 +433,18 @@ fn force_delete(app: &App, project_name: &str) -> AppResult<()> {
                 app.ui.warn(&format!("Need to delete it manually. Local project folder path: {}", target_path.to_string_lossy()));
             }
         }
+        let lock_file = get_lock_file_path(
+            target_path.parent().ok_or(AppError::Validation(format!("No parent folder found")))?, 
+            project_name
+        )?;
+
+        match fs::remove_file(&lock_file) {
+            Ok(_) => {},
+            Err(e) => {
+                app.ui.warn(&format!("Failed to delete lock file: {}", e));
+                app.ui.warn(&format!("Need to delete it manually. Lock file path: {}", lock_file.to_string_lossy()));
+            }
+        }
     }
 
     Ok(())
@@ -326,6 +466,10 @@ pub fn handle_delete(app: &App, project_name: &str, force: bool) -> AppResult<()
             app.ui.info(&format!("The project {} does not exist", project_name.yellow().bold()));
         },
         ProjectStatus::Active => {
+            if !ensure_delete(app)? {
+                app.ui.error(&format!("The project {} is still in use by other workspaces. Cannot delete", project_name.yellow().bold()));
+                return Ok(());
+            }
             if !force {
                 app.ui.info("This will remove the project in the latest revision, but history will be preserved.");
                 app.ui.info("Use '--force' or '-f' option to permanently delete the project.");
@@ -337,6 +481,11 @@ pub fn handle_delete(app: &App, project_name: &str, force: bool) -> AppResult<()
             }
         },
         ProjectStatus::Deleted => {
+            if !ensure_delete(app)? {
+                app.ui.error(&format!("The project {} is still in use by other workspaces. Cannot delete", project_name.yellow().bold()));
+                return Ok(());
+            }
+            
             if !force {
                 app.ui.success(&format!("Project {} is already deleted", project_name.yellow().bold()));
             } else {
@@ -409,7 +558,9 @@ pub fn _handle_debug(_app: &App) -> AppResult<()> {
 /// vault_target: .ws_store/{repo_name}/{project_name}
 pub fn handle_link_folder(project_name: &str, origin_dir_path: &str) -> AppResult<()> {
     let origin_path = std::path::PathBuf::from(origin_dir_path);
-    let vault_target = std::env::current_dir()?.join(project_name);
+    let current_dir = env::current_dir()?;
+    let vault_target = current_dir.join(project_name);
+    let current_lock_file_path = get_lock_file_path(&current_dir, project_name)?;
 
     let mut retry  = 0;
     let mut success_delete = false;
@@ -441,8 +592,16 @@ pub fn handle_link_folder(project_name: &str, origin_dir_path: &str) -> AppResul
         return Ok(());
     }
 
+    // lock 文件加 1
+    if let Err(e) = change_lock_file(&current_lock_file_path, ChangeLockType::Add) {
+        report_error_gui(&format!("更新锁文件失败: {}\n目标: {:?}", e, current_lock_file_path));
+        return Ok(());
+    }
+    
+
     if let Err(e) = launch_terminal(&origin_path) {
         report_error_gui(&format!("无法启动终端: {}", e));
+        return Ok(());
     }
 
     refresh_explorer_view(&origin_path);

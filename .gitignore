@@ -1,7 +1,6 @@
 /target
 .cargo/
 Cargo.lock
-README.md
 .git/
 .svn/
 
@@ -26,7 +25,7 @@ assets
 *.local
 
 # Editor directories and files
-.vscode/*
+.vscode/
 !.vscode/extensions.json
 .idea
 .DS_Store
@@ -36,3 +35,4 @@ assets
 *.sln
 *.sw?
 
+README_old.md

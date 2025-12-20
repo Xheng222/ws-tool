@@ -4,7 +4,7 @@ use std::{ffi::OsString, fs, os::windows::{ffi::OsStrExt, process::CommandExt}, 
 
 use windows_sys::Win32::{Foundation::{CloseHandle, FALSE, TRUE}, Storage::FileSystem::{FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_SYSTEM, GetFileAttributesW, GetLogicalDriveStringsW, INVALID_FILE_ATTRIBUTES, SetFileAttributesW}, System::{Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS}, Threading::{GetCurrentProcessId, OpenProcess, PROCESS_TERMINATE, TerminateProcess}}, UI::Shell::{SHCNE_UPDATEDIR, SHCNF_PATHW, SHChangeNotify}};
 
-use crate::core::{app::App, error::{AppError, AppResult}};
+use crate::core::error::{AppError, AppResult};
 
 /// origin_dir_path: 工作文件夹路径
 /// current_dir: .ws_store/{repo_name}
@@ -169,17 +169,8 @@ pub fn report_error_gui(msg: &str) {
 }
 
 // 使用软链接切换项目
-pub fn switch_project_via_symlink(app: &App, target_project: &str) -> AppResult<PathBuf> {
+pub fn switch_project_via_symlink(target_path: &Path) -> AppResult<()> {
     let current_dir = std::env::current_dir()?;
-    let repo_name = app.svn_ctx.get_repo_name()?;
-
-    // 寻找目标项目路径
-    let target_path = match find_a_project_in_ws_store(&repo_name, target_project)? {
-        Some(p) => p,
-        None => {
-            return Err(AppError::Validation(format!("Cannot find target project '{}' in any .ws_store/{} folder", target_project, repo_name)));
-        }
-    };
 
     // 删除当前文件夹 remove_link
     remove_symlink(&current_dir)?;
@@ -190,7 +181,7 @@ pub fn switch_project_via_symlink(app: &App, target_project: &str) -> AppResult<
     // 刷新资源管理器视图
     refresh_explorer_view(&current_dir);
 
-    Ok(target_path)
+    Ok(())
 }
 
 // 找到一个项目
